@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="manifest" href="./manifest.json">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Alphonso's Meal & Workout Planner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js">
+// ─────────────────────────────────────────
+// PWA SERVICE WORKER
+// ─────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("./sw.js").catch(function(){});
+  });
+}
+
+</script>
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: rgba(255, 255, 255, 0.82);
+  --bg-tertiary: #f2f2f7;
+  --bg-elevated: rgba(255, 255, 255, 0.9);
+  --text-primary: #111111;
+  --text-secondary: #636366;
+  --text-tertiary: #8e8e93;
+  --border-faint: rgba(60, 60, 67, 0.12);
+  --border-mid: rgba(60, 60, 67, 0.18);
+  --green: #007aff;
+  --green-dark: #0062cc;
+  --green-dim: rgba(0, 122, 255, 0.12);
+  --danger: #ff3b30;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background:
+    linear-gradient(180deg, #f8f8fa 0%, #f2f2f7 100%);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  position: relative;
+  overflow-x: hidden;
+}
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: auto;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.8;
+  z-index: -1;
+}
+body::before {
+  top: -60px;
+  right: -70px;
+  background: rgba(0, 122, 255, 0.05);
+}
+body::after {
+  bottom: 120px;
+  left: -80px;
+  background: rgba(255, 255, 255, 0.75);
+}
+button { cursor: pointer; font-family: var(--font); }
+:focus-visible { outline: 1.5px solid var(--green); outline-offset: 2px; border-radius: var(--r-md); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* LAYOUT */
+.shell { max-width: 680px; width: 100%; margin: 0 auto; padding: 1rem 0.9rem; display: flex; flex-direction: column; gap: 0.85rem; }
+.view { display: none; padding-bottom: 80px; }
+.view.active { display: block; }
+
+/* HEADER */
+.app-name { font-size: 12px; font-weight: 600; color: var(--text-tertiary); letter-spacing: -0.01em; text-align: center; }
+.week-nav { display: none; align-items: center; justify-content: center; gap: 12px; }
+.nav-btn { background: rgba(255,255,255,0.78); border: 0.5px solid rgba(60,60,67,0.12); border-radius: 999px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; color: var(--text-primary); font-size: 15px; transition: background 0.16s, transform 0.16s, border-color 0.16s, box-shadow 0.16s; box-shadow: 0 2px 8px rgba(15,23,42,0.06); backdrop-filter: blur(18px); }
+.nav-btn:hover { background: rgba(255,255,255,0.96); transform: translateY(-1px); border-color: rgba(60,60,67,0.16); box-shadow: 0 4px 10px rgba(15,23,42,0.08); }
+.nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.week-title { font-size: 20px; font-weight: 700; min-width: 180px; text-align: center; letter-spacing: -0.04em; }
+.secondary-btn { width: auto; min-height: 34px; padding: 0 12px; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: -0.01em; }
+
+/* CARDS */
+.card { background: var(--bg-elevated); border-radius: 18px; padding: 0.95rem; border: 0.5px solid rgba(60,60,67,0.08); box-shadow: 0 6px 18px rgba(15,23,42,0.05); backdrop-filter: blur(20px); }
+.card-title { font-size: 12px; color: var(--text-tertiary); letter-spacing: -0.01em; margin-bottom: 0.7rem; font-weight: 600; }
+
+/* MACRO TILES */
+.macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.macro-tile { background: rgba(255,255,255,0.7); border-radius: 16px; border: 0.5px solid rgba(60,60,67,0.08); padding: 0.85rem 0.9rem; box-shadow: 0 2px 10px rgba(15,23,42,0.04); backdrop-filter: blur(18px); }
+.macro-label { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; letter-spacing: -0.01em; }
+.macro-value { font-size: 24px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
+
+/* AUTO BADGE */
+.auto-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: -0.01em; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.7); color: var(--green); border: 0.5px solid rgba(0,122,255,0.12); }
+.auto-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+/* DAY TABS */
+.day-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px; border-radius: 14px; background: rgba(118,118,128,0.12); border: 0.5px solid rgba(60,60,67,0.08); backdrop-filter: blur(18px); }
+.day-tabs::-webkit-scrollbar { display: none; }
+.day-tab { min-width: 68px; text-align: center; padding: 8px 6px 9px; background: transparent; border: 0; border-radius: 11px; color: var(--text-secondary); cursor: pointer; transition: transform 0.16s, background 0.16s, box-shadow 0.16s, color 0.16s; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.day-tab:hover { background: rgba(255,255,255,0.66); color: var(--text-primary); }
+.day-tab.active { background: rgba(255,255,255,0.98); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 6px 18px rgba(15,23,42,0.06); }
+.day-tab-label { font-size: 10px; font-weight: 600; letter-spacing: -0.01em; text-transform: none; }
+.day-tab-date { font-size: 15px; font-weight: 700; letter-spacing: -0.03em; color: inherit; }
+
+/* MEAL ROWS */
+.meal-list { display: flex; flex-direction: column; gap: 8px; }
+.meal-row { background: rgba(255,255,255,0.82); border: 0.5px solid rgba(60,60,67,0.08); border-radius: 18px; overflow: hidden; box-shadow: 0 4px 14px rgba(15,23,42,0.04); backdrop-filter: blur(16px); }
+.meal-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none; }
+.meal-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.meal-time { font-size: 11px; color: var(--text-tertiary); letter-spacing: -0.01em; width: 92px; flex-shrink: 0; }
+.meal-name { font-size: 15px; font-weight: 600; flex: 1; letter-spacing: -0.02em; }
+.meal-kcal { font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.chevron { color: var(--text-tertiary); transition: transform 0.2s; flex-shrink: 0; }
+.meal-row.open .chevron { transform: rotate(180deg); }
+.meal-body { max-height: 0; overflow: hidden; transition: max-height 0.3s cubic-bezier(0.16,1,0.3,1); }
+.meal-row.open .meal-body { max-height: 260px; }
+.meal-body-inner { padding: 0 14px 14px; border-top: 0.5px solid var(--border-faint); padding-top: 10px; background: rgba(255,255,255,0.38); }
+.meal-items { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.meal-items li { font-size: 12px; color: var(--text-secondary); display: flex; gap: 8px; }
+.meal-items li::before { content: "–"; color: var(--text-tertiary); flex-shrink: 0; }
+.meal-macros-detail { display: flex; gap: 16px; margin-top: 10px; padding-top: 8px; border-top: 0.5px solid var(--border-faint); }
+.mdm { font-size: 11px; color: var(--text-tertiary); }
+.mdm span { color: var(--text-primary); font-weight: 600; }
+
+/* PROGRESS */
+.prog-bar-wrap { margin: 6px 0 14px; }
+.prog-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-tertiary); margin-bottom: 4px; }
+.prog-bar { height: 8px; background: rgba(15,23,42,0.06); border-radius: 999px; overflow: hidden; }
+.prog-fill { height: 100%; background: linear-gradient(90deg, #4da3ff 0%, var(--green) 100%); transition: width 0.4s; }
+.goal-stats { display: flex; }
+.goal-stat { flex: 1; text-align: center; padding: 10px 0; }
+.goal-stat + .goal-stat { border-left: 0.5px solid var(--border-faint); }
+.goal-stat .sn { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
+.goal-stat .sl { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+
+/* WEIGHT EDIT */
+.edit-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--green); background: none; border: none; padding: 6px 0; margin-top: 8px; }
+.weight-form { display: none; border-top: 0.5px solid var(--border-faint); margin-top: 10px; padding-top: 10px; }
+.weight-form-title { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+.weight-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wf label { font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+.wf input { width: 100%; background: rgba(255,255,255,0.96); border: 0.5px solid var(--border-mid); border-radius: 10px; padding: 10px 12px; font-size: 16px; font-weight: 500; color: var(--text-primary); font-family: var(--font); outline: none; font-variant-numeric: tabular-nums; }
+.wf input:focus { border-color: var(--green); }
+.weight-actions { display: flex; gap: 8px; margin-top: 8px; }
+.btn-save { flex: 1; background: var(--green); border: none; border-radius: 12px; padding: 10px; font-size: 14px; font-weight: 600; color: #fff; transition: transform 0.12s, box-shadow 0.12s; box-shadow: 0 6px 16px rgba(0,122,255,0.16); }
+.btn-save:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(0,122,255,0.2); }
+.btn-cancel { background: rgba(255,255,255,0.72); border: 0.5px solid var(--border-mid); border-radius: 12px; padding: 10px 14px; font-size: 14px; color: var(--text-secondary); transition: background 0.12s, border-color 0.12s; }
+.btn-cancel:hover { background: rgba(255,255,255,0.92); border-color: rgba(15,23,42,0.14); }
+
+/* SHOPPING */
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+#view-shopping .shell { background: transparent; }
+.shop-cat { background: rgba(255,255,255,0.82); border-radius: 18px; padding: 1rem; border: 0.5px solid rgba(60,60,67,0.08); box-shadow: 0 6px 16px rgba(15,23,42,0.05); backdrop-filter: blur(16px); }
+.shop-cat-title { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px; }
+.cat-dot { width: 6px; height: 6px; border-radius: 50%; }
+.shop-items { list-style: none; }
+.shop-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; font-weight: 500; border-bottom: 0.5px solid var(--border-faint); cursor: pointer; transition: opacity 0.12s; }
+.shop-item:last-child { border-bottom: none; }
+.shop-item.checked { opacity: 0.5; }
+.shop-item.checked .item-text { text-decoration: line-through; }
+.chk { width: 16px; height: 16px; border-radius: 4px; border: 0.5px solid var(--border-mid); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+.shop-item.checked .chk { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* TIPS */
+.tip-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 0.5px solid var(--border-faint); }
+.tip-row:last-child { border-bottom: none; }
+.tip-emoji { font-size: 17px; flex-shrink: 0; opacity: 0.92; }
+.tip-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; letter-spacing: -0.01em; }
+.tip-body { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+/* WORKOUT */
+.wk-split-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px; border-radius: 14px; background: rgba(118,118,128,0.12); border: 0.5px solid rgba(60,60,67,0.08); backdrop-filter: blur(18px); }
+.wk-split-tabs::-webkit-scrollbar { display:none; }
+.split-tab { min-width: 68px; text-align: center; padding: 8px 6px 9px; background: transparent; border: 0; border-radius: 11px; color: var(--text-secondary); cursor: pointer; transition: transform 0.16s, background 0.16s, box-shadow 0.16s, color 0.16s; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.split-tab:hover { background: rgba(255,255,255,0.66); color: var(--text-primary); }
+.split-tab.active { background: rgba(255,255,255,0.98); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 6px 18px rgba(15,23,42,0.06); }
+.day-badge { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; padding:4px 10px; border-radius:99px; margin-bottom:12px; }
+.day-badge.work { background:var(--green-dim); color:var(--green); border:0.5px solid var(--green); }
+.day-badge.rest { background:rgba(136,135,128,0.1); color:var(--text-tertiary); border:0.5px solid var(--border-faint); }
+.exercise-list { display:flex; flex-direction:column; gap:8px; }
+.ex-row { background:var(--bg-primary); border:0.5px solid var(--border-faint); border-radius:var(--r-lg); overflow:hidden; }
+.ex-header { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer; }
+.ex-num { width:22px; height:22px; border-radius:50%; background:var(--green-dim); color:var(--green); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.ex-name { font-size:14px; font-weight:700; flex:1; letter-spacing:-0.01em; }
+.ex-sets { font-size:12px; color:var(--green); font-weight:700; white-space:nowrap; }
+.ex-body { max-height:0; overflow:hidden; transition:max-height 0.3s cubic-bezier(0.16,1,0.3,1); }
+.ex-row.open .ex-body { max-height:300px; }
+.ex-body-inner { padding:10px 14px 14px; border-top:0.5px solid var(--border-faint); }
+.ex-desc { font-size:12px; color:var(--text-secondary); line-height:1.6; margin-bottom:8px; }
+.ex-cues { list-style:none; display:flex; flex-direction:column; gap:4px; }
+.ex-cues li { font-size:12px; color:var(--text-secondary); display:flex; gap:8px; }
+.ex-cues li::before { content:"→"; color:var(--green); flex-shrink:0; }
+.rest-card { text-align:center; padding:2rem 1rem; }
+.rest-card .rest-icon { font-size:40px; margin-bottom:12px; }
+.rest-card h3 { font-size:17px; font-weight:500; margin-bottom:6px; }
+.rest-card p { font-size:13px; color:var(--text-secondary); max-width:36ch; margin:0 auto; }
+.overload-tip { display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-bottom:0.5px solid var(--border-faint); }
+.overload-tip:last-child { border-bottom:none; }
+.ot-icon { font-size:18px; flex-shrink:0; }
+.ot-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; letter-spacing: -0.01em; }
+.ot-body { font-size:12px; color:var(--text-secondary); line-height:1.5; }
+
+.bar-tag { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 8px; border-radius:99px; background:rgba(139,92,246,0.10); color:#7c3aed; border:1px solid rgba(139,92,246,0.22); margin-bottom:8px; }
+.bar-dot { font-size:12px; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--text-primary); color: var(--bg-primary); font-size: 12px; font-weight: 500; padding: 8px 16px; border-radius: 99px; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 300; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* TAB BAR */
+.tab-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: rgba(249,249,251,0.84); border-top: 0.5px solid rgba(60,60,67,0.14); padding-bottom: env(safe-area-inset-bottom); z-index: 100; box-shadow: 0 -4px 14px rgba(15,23,42,0.04); backdrop-filter: blur(24px); }
+.tab { flex: 1; text-align: center; padding: 9px 0 8px; color: var(--text-tertiary); cursor: pointer; font-size: 10px; font-weight: 600; position: relative; transition: color 0.12s; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; letter-spacing: -0.01em; }
+.tab.active { color: var(--green); }
+.tab.active::after { display: none; }
+.tab svg { display: block; flex-shrink: 0; }
+
+@media (max-width: 480px) {
+  .meal-time { display: none; }
+  .macro-row { grid-template-columns: repeat(3, 1fr); }
+  .macro-value { font-size: 16px; }
+  .weight-fields { grid-template-columns: 1fr; }
+  .day-tabs { grid-template-columns: repeat(4, minmax(68px, 1fr)); }
+  .wk-split-tabs { grid-template-columns: repeat(4, minmax(68px, 1fr)); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── MEALS VIEW ── -->
+<div id="view-meals" class="view active">
+  <div class="shell">
+
+    <div class="app-name">Meals</div>
+
+    <div class="week-nav">
+      <button class="nav-btn" id="prevBtn">&#8249;</button>
+      <span class="week-title" id="weekTitle">—</span>
+      <button class="nav-btn" id="nextBtn">&#8250;</button>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+      <span class="auto-badge">Auto-updated</span>
+      <span style="font-size:11px;color:var(--text-tertiary);" id="nextUpdate"></span>
+    </div>
+
+    <div class="macro-row">
+      <div class="macro-tile"><div class="macro-label">Calories</div><div class="macro-value" id="mKcal">—</div></div>
+      <div class="macro-tile"><div class="macro-label">Protein</div><div class="macro-value" id="mProt">—</div></div>
+      <div class="macro-tile"><div class="macro-label">Carbs</div><div class="macro-value" id="mCarb">—</div></div>
+    </div>
+
+    <div class="day-tabs" id="dayTabs"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:16px;font-weight:500;" id="dayName">—</div>
+        <div style="font-size:12px;color:var(--text-tertiary);" id="dayDate">—</div>
+      </div>
+      <button class="nav-btn secondary-btn" id="shuffleBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Shuffle
+      </button>
+    </div>
+
+    <div class="meal-list" id="mealList"></div>
+
+    <div class="card">
+      <div class="card-title">Anti-Bloat Tips</div>
+      <div id="tipsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PROGRESS VIEW ── -->
+<div id="view-progress" class="view">
+  <div class="shell">
+    <div class="app-name">Progress</div>
+
+    <div class="card">
+      <div class="card-title">Weight Goal</div>
+      <div class="prog-bar-wrap">
+        <div class="prog-header">
+          <span id="goalRange">135 lbs → 150 lbs</span>
+          <span id="goalPct">0%</span>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" id="goalFill" style="width:0%"></div></div>
+      </div>
+      <div class="goal-stats">
+        <div class="goal-stat"><div class="sn" id="gCurrent">135</div><div class="sl">current lbs</div></div>
+        <div class="goal-stat"><div class="sn" id="gGained">0</div><div class="sl">lbs gained</div></div>
+        <div class="goal-stat"><div class="sn" id="gLeft">15</div><div class="sl">lbs to go</div></div>
+      </div>
+
+      <button class="edit-toggle" id="editToggle">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Update weight
+      </button>
+
+      <div class="weight-form" id="weightForm">
+        <div class="weight-form-title">Update your stats</div>
+        <div class="weight-fields">
+          <div class="wf"><label>Current Weight (lbs)</label><input type="number" id="inCurrent" step="0.1" min="50" max="500" placeholder="e.g. 137"></div>
+          <div class="wf"><label>Goal Weight (lbs)</label><input type="number" id="inGoal" step="0.1" min="50" max="500" placeholder="e.g. 150"></div>
+          <div class="wf"><label>Starting Weight (lbs)</label><input type="number" id="inStart" step="0.1" min="50" max="500" placeholder="e.g. 135"></div>
+        </div>
+        <div class="weight-actions">
+          <button class="btn-save" id="saveWeight">Save</button>
+          <button class="btn-cancel" id="cancelWeight">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SHOPPING VIEW ── -->
+<div id="view-shopping" class="view">
+  <div class="shell">
+    <div class="app-name">Shopping List</div>
+    <div class="shop-grid" id="shopGrid"></div>
+  </div>
+</div>
+
+<!-- ── WORKOUT VIEW ── -->
+<div id="view-workout" class="view">
+  <div class="shell">
+    <div class="app-name">Zero-Equipment & Bar Workout</div>
+
+    <div class="card" style="background:rgba(255,255,255,0.82);border-color:rgba(0,122,255,0.16);">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Built for Mass Gain 💪</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;">High-volume bodyweight training that overloads your muscles and drives hypertrophy. Follow the weekly split below, rest 60–90s between sets.</div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.72);border:1px solid rgba(15,23,42,0.08);color:var(--text-primary);font-weight:600;">Bodyweight only</span></div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.22);color:#7c3aed;font-weight:600;">🔩 Pull-up bar</span></div>
+    </div>
+
+    <div class="wk-split-tabs" id="splitTabs"></div>
+    <div id="workoutContent"></div>
+
+    <div class="card">
+      <div class="card-title">Progressive Overload Tips</div>
+      <div id="overloadTips"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TAB BAR ── -->
+<div class="tab-bar">
+  <div class="tab active" id="tab-meals" onclick="switchTab('meals')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+    Meals
+  </div>
+  <div class="tab" id="tab-workout" onclick="switchTab('workout')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 9.5v5"/><path d="M5.5 7.5v9"/><path d="M8.5 10.5v3"/><path d="M15.5 10.5v3"/><path d="M18.5 7.5v9"/><path d="M21.5 9.5v5"/><path d="M8.5 12h7"/></svg>
+    Workout
+  </div>
+  <div class="tab" id="tab-shopping" onclick="switchTab('shopping')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+    Shopping
+  </div>
+  <div class="tab" id="tab-progress" onclick="switchTab('progress')">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+    Progress
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────
+// CONSTANTS & DATA (Defined FIRST to prevent hoisting errors)
+// ─────────────────────────────────────────
+const DAYS  = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const SLOTS = ["breakfast","midmorning","lunch","afternoon","dinner"];
+const TIMES = {breakfast:"Breakfast",midmorning:"Mid-Morning",lunch:"Lunch",afternoon:"Afternoon",dinner:"Dinner"};
+const DOTS  = {breakfast:"#d4a017",midmorning:"#4e9fa8",lunch:"#5fa83b",afternoon:"#b8622a",dinner:"#8b6abf"};
+
+// NO AVOCADOS in this meal pool
+const POOL = {
+  breakfast: [
+    {name:"Oat Power Bowl",          items:["1.5 cups rolled oats in whole milk","2 tbsp honey + 1 banana","2 scrambled eggs"],                        p:22,c:108,f:18,kcal:700},
+    {name:"Banana Oat Pancakes",     items:["3 pancakes: 2 eggs + 1 banana + half cup oats","2 tbsp maple syrup","1 cup OJ"],                          p:20,c:105,f:16,kcal:680},
+    {name:"Oat Smoothie Bowl",       items:["2 cups milk + 1 cup oats + 1 banana blended","2 tbsp peanut butter + 2 tbsp honey","Topped with granola"],p:24,c:110,f:20,kcal:710},
+    {name:"Bagel & Egg Plate",       items:["1 large bagel with butter","3 scrambled eggs","1 cup whole milk"],                                        p:28,c:95, f:22,kcal:690},
+    {name:"Berry Oat Boost",         items:["2 cups oatmeal in whole milk","1 cup blueberries + 2 tbsp almond butter","2 boiled eggs"],                p:26,c:112,f:19,kcal:720},
+    {name:"Peanut Butter Oats",      items:["2 cups oats in milk","3 tbsp peanut butter + 1 tbsp honey","1 banana on top"],                           p:24,c:115,f:22,kcal:730},
+    {name:"Maple Granola Parfait",   items:["1 cup Greek yogurt","1.5 cups granola + 2 tbsp maple syrup","1 cup strawberries"],                        p:22,c:108,f:14,kcal:695},
+    {name:"French Toast Stack",      items:["3 slices thick bread dipped in egg + milk","2 tbsp maple syrup + 1 banana","Glass of whole milk"],        p:24,c:110,f:18,kcal:705},
+    {name:"Rice & Egg Bowl",         items:["1.5 cups white rice","3 fried eggs + 1 tbsp butter","Soy sauce + sesame oil"],                           p:26,c:100,f:20,kcal:695},
+    {name:"Cottage Cheese Toast",    items:["2 slices sourdough toast","Half cup cottage cheese + honey drizzle","1 banana + 2 boiled eggs"],          p:28,c:98, f:14,kcal:685},
+    {name:"Almond Butter Bagel",     items:["1 everything bagel","3 tbsp almond butter + honey","1 cup OJ + 2 eggs"],                                 p:26,c:108,f:20,kcal:710},
+    {name:"Overnight Oats",          items:["1.5 cups oats soaked in whole milk overnight","2 tbsp honey + raisins + banana","2 hardboiled eggs"],     p:24,c:112,f:16,kcal:705},
+    {name:"Egg & Potato Hash",       items:["2 medium russet potatoes diced and pan-fried","3 scrambled eggs","1 cup whole milk"],                     p:26,c:105,f:18,kcal:700},
+    {name:"Sweet Potato Oat Bowl",   items:["1 cup oats + half cup mashed sweet potato in milk","2 tbsp peanut butter + cinnamon","1 banana"],        p:22,c:114,f:16,kcal:705},
+    {name:"High-Cal Smoothie",       items:["2 cups whole milk + 1 cup oats + 1 banana blended","2 tbsp peanut butter + 2 tbsp honey","2 boiled eggs"],p:28,c:118,f:20,kcal:740}
+  ],
+  midmorning: [
+    {name:"Yogurt Crunch",           items:["1 cup full-fat Greek yogurt","1 cup granola + 1 tbsp honey","Handful of mixed berries"],                  p:18,c:58,f:10,kcal:400},
+    {name:"PB Bagel",                items:["1 large bagel","3 tbsp peanut butter","1 banana"],                                                        p:16,c:62,f:14,kcal:410},
+    {name:"Cottage & Pineapple",     items:["1 cup cottage cheese","1 cup pineapple chunks","5 whole grain crackers"],                                 p:22,c:55,f:8, kcal:390},
+    {name:"Egg Toast Stack",         items:["2 slices toast with butter","3 eggs scrambled","Glass of OJ"],                                           p:24,c:52,f:18,kcal:420},
+    {name:"Granola Bowl",            items:["1.5 cups granola + 3/4 cup whole milk","1 tbsp almond butter","Banana slices"],                           p:14,c:64,f:12,kcal:405},
+    {name:"PB Rice Cakes",           items:["3 rice cakes","4 tbsp peanut butter","1 apple + glass of milk"],                                         p:16,c:60,f:16,kcal:415},
+    {name:"Banana Milk Shake",       items:["2 cups whole milk + 2 bananas blended","2 tbsp honey","5 whole wheat crackers"],                          p:14,c:68,f:10,kcal:410},
+    {name:"Toast & Almond Butter",   items:["2 thick slices sourdough","3 tbsp almond butter","1 cup OJ"],                                            p:14,c:60,f:16,kcal:405},
+    {name:"Cheese & Crackers",       items:["8 whole wheat crackers","2 oz cheddar cheese","1 banana + 1 cup whole milk"],                            p:18,c:56,f:14,kcal:408},
+    {name:"Greek Yogurt Smoothie",   items:["1 cup Greek yogurt blended with 1 cup milk","1 banana + 2 tbsp honey","Handful of granola on top"],       p:20,c:62,f:10,kcal:412},
+    {name:"Oat Energy Balls",        items:["3 no-bake oat balls: oats + PB + honey","1 cup whole milk","1 orange"],                                  p:16,c:60,f:14,kcal:408},
+    {name:"Mango Cottage Bowl",      items:["1 cup cottage cheese","1 cup mango chunks","2 tbsp honey + 4 crackers"],                                 p:20,c:58,f:6, kcal:395},
+    {name:"Peanut Butter Banana",    items:["2 bananas spread with 3 tbsp PB","1 cup whole milk","Small handful mixed nuts"],                         p:14,c:62,f:18,kcal:415},
+    {name:"Tuna Crackers",           items:["1 can tuna in olive oil","8 whole wheat crackers","1 apple + glass of OJ"],                              p:26,c:50,f:10,kcal:400},
+    {name:"Boiled Egg & Toast",      items:["3 boiled eggs","2 slices buttered toast","1 cup whole milk + 1 banana"],                                 p:24,c:54,f:16,kcal:410}
+  ],
+  lunch: [
+    {name:"Chicken Rice Bowl",       items:["2 cups jasmine rice","5 oz grilled chicken breast","Olive oil + soy sauce + salsa"],                     p:42,c:96, f:12,kcal:750},
+    {name:"Tuna Penne Pasta",        items:["2 cups cooked penne","5 oz canned tuna in olive oil","Marinara + parmesan"],                             p:40,c:98, f:14,kcal:760},
+    {name:"Salmon Rice Plate",       items:["2 cups jasmine rice","5 oz salmon fillet","Sesame oil + soy sauce"],                                     p:38,c:95, f:16,kcal:740},
+    {name:"Loaded Baked Potato",     items:["2 large russet potatoes","5 oz shredded rotisserie chicken","Sour cream + cheddar"],                     p:42,c:92, f:14,kcal:750},
+    {name:"Turkey Pasta",            items:["2.5 cups penne pasta","5 oz ground turkey","Olive oil + garlic + herbs"],                                p:40,c:100,f:15,kcal:770},
+    {name:"Beef Rice Stir-Fry",      items:["2.5 cups jasmine rice","5 oz lean ground beef","Soy sauce + sesame oil + green onion"],                  p:42,c:102,f:14,kcal:765},
+    {name:"Chicken Potato Bowl",     items:["2 medium potatoes mashed","5 oz grilled chicken thighs","Butter + garlic + olive oil"],                  p:40,c:94, f:16,kcal:755},
+    {name:"Pasta Chicken Pesto",     items:["2 cups fusilli pasta","5 oz grilled chicken","2 tbsp pesto + parmesan"],                                 p:42,c:96, f:16,kcal:760},
+    {name:"Shrimp Fried Rice",       items:["2.5 cups white rice","5 oz shrimp","Soy sauce + eggs + sesame oil"],                                     p:38,c:100,f:12,kcal:755},
+    {name:"Ground Beef Pasta",       items:["2 cups rigatoni","5 oz ground beef","Marinara + mozzarella + garlic bread"],                             p:44,c:98, f:16,kcal:770},
+    {name:"Rice & Black Bean Bowl",  items:["2 cups rice","1 cup black beans","Salsa + sour cream + shredded chicken"],                              p:40,c:104,f:10,kcal:755},
+    {name:"Mac & Chicken",           items:["2.5 cups mac & cheese","4 oz grilled chicken strips","Side salad"],                                      p:40,c:100,f:18,kcal:768},
+    {name:"Teriyaki Chicken Rice",   items:["2.5 cups jasmine rice","5 oz chicken thighs in teriyaki","Sesame seeds + green onion"],                  p:42,c:100,f:12,kcal:758},
+    {name:"Potato & Egg Hash",       items:["3 medium potatoes fried in olive oil","3 fried eggs","Salsa + sour cream"],                              p:28,c:96, f:18,kcal:745},
+    {name:"Spaghetti Aglio e Olio",  items:["2.5 cups spaghetti","5 oz chicken breast","Olive oil + garlic + chili + parmesan"],                     p:42,c:98, f:16,kcal:758}
+  ],
+  afternoon: [
+    {name:"Rice Cake PB",            items:["2 rice cakes","4 tbsp peanut butter","1 apple"],                                                         p:12,c:54,f:18,kcal:400},
+    {name:"Sweet Potato PB",         items:["1 large sweet potato baked","2 tbsp peanut butter","Cinnamon"],                                          p:8, c:62,f:12,kcal:410},
+    {name:"Egg Fried Rice",          items:["1.5 cups white rice","1 fried egg","Soy sauce + sesame oil"],                                            p:14,c:58,f:10,kcal:395},
+    {name:"Pasta Tuna Salad",        items:["1.5 cups pasta + 2 oz tuna","Olive oil + herbs","Salt + pepper"],                                        p:18,c:56,f:10,kcal:405},
+    {name:"Yogurt Parfait",          items:["1 cup Greek yogurt","1.5 cups granola","Honey + orange"],                                                p:16,c:62,f:10,kcal:420},
+    {name:"Banana PB Toast",         items:["2 slices toast","3 tbsp peanut butter","1 banana sliced on top"],                                        p:14,c:60,f:14,kcal:408},
+    {name:"Cottage Fruit Bowl",      items:["1 cup cottage cheese","1 cup mixed fruit: mango + pineapple","2 tbsp honey"],                            p:18,c:58,f:6, kcal:398},
+    {name:"Potato Wedges & Dip",     items:["2 medium potatoes as oven wedges","2 tbsp sour cream dip","1 cup whole milk"],                           p:10,c:64,f:12,kcal:408},
+    {name:"Almond Granola Bars",     items:["2 oat bars: oats + almond butter + honey","1 cup whole milk","1 banana"],                                p:14,c:62,f:14,kcal:415},
+    {name:"Cheese Quesadilla",       items:["1 large flour tortilla","2 oz shredded cheddar","Salsa + sour cream"],                                   p:16,c:54,f:16,kcal:410},
+    {name:"PB Banana Smoothie",      items:["1.5 cups whole milk + 2 bananas","2 tbsp peanut butter + 1 tbsp honey","Side: 3 crackers"],              p:14,c:64,f:14,kcal:415},
+    {name:"Honey Ricotta Toast",       items:["2 thick slices sourdough toast","4 tbsp ricotta cheese + 2 tbsp honey","1 banana + glass of whole milk"],  p:16,c:64,f:12,kcal:415},
+    {name:"Tuna Rice Cake Stack",    items:["3 rice cakes","2 oz tuna in olive oil","Lemon + herbs"],                                                 p:18,c:50,f:12,kcal:390},
+    {name:"Greek Yogurt & Honey",    items:["1.5 cups full-fat Greek yogurt","2 tbsp honey","1 cup granola + banana"],                                p:20,c:66,f:10,kcal:422},
+    {name:"Boiled Egg Snack Box",    items:["3 boiled eggs","5 whole grain crackers","1 cup whole milk + 1 apple"],                                   p:22,c:52,f:14,kcal:410}
+  ],
+  dinner: [
+    {name:"Spaghetti Bolognese",         items:["2.5 cups spaghetti","5 oz ground turkey marinara","2 slices garlic bread + parmesan"],               p:42,c:120,f:18,kcal:850},
+    {name:"Loaded Mac & Cheese",         items:["3 cups mac & cheese: whole milk + butter","4 oz grilled chicken","Light side salad"],                p:40,c:118,f:20,kcal:840},
+    {name:"Mashed Potato & Steak",       items:["2 russet potatoes mashed with butter and milk","5 oz seared steak strips","Roasted garlic"],        p:44,c:115,f:22,kcal:860},
+    {name:"Beef Rice Stir-Fry",          items:["2.5 cups jasmine rice","5 oz lean ground beef","Soy sauce + sesame oil + green onion"],              p:42,c:120,f:16,kcal:850},
+    {name:"Meatball Pasta Bake",         items:["2.5 cups penne","4 oz beef meatballs + marinara","2 slices garlic bread + parmesan"],                p:40,c:118,f:18,kcal:845},
+    {name:"Chicken Potato Casserole",    items:["3 medium potatoes roasted","6 oz chicken thighs baked","Butter + herbs + sour cream"],              p:44,c:114,f:20,kcal:852},
+    {name:"Ground Turkey Rice Bowl",     items:["2.5 cups jasmine rice","5 oz ground turkey + salsa","Shredded cheddar + sour cream"],                p:42,c:118,f:16,kcal:848},
+    {name:"Pasta Primavera + Chicken",   items:["2.5 cups rigatoni","5 oz grilled chicken","Olive oil + garlic + parmesan + cherry tomatoes"],        p:44,c:116,f:18,kcal:855},
+    {name:"Salmon Mashed Potato",        items:["5 oz baked salmon","2.5 cups mashed potato: butter + cream","Lemon + dill + side bread"],           p:40,c:114,f:22,kcal:850},
+    {name:"Teriyaki Beef Rice",          items:["2.5 cups white rice","5 oz lean beef strips in teriyaki","Sesame + green onion + broccoli"],         p:42,c:120,f:16,kcal:852},
+    {name:"Chicken Alfredo",             items:["2.5 cups fettuccine","5 oz chicken breast","Cream + parmesan + garlic + butter sauce"],              p:44,c:116,f:22,kcal:858},
+    {name:"Tuna Pasta Bake",             items:["2.5 cups penne","2 cans tuna in olive oil","Cream of mushroom + parmesan crust"],                    p:46,c:112,f:18,kcal:848},
+    {name:"Loaded Baked Potato Dinner",  items:["3 large russet potatoes","5 oz ground beef + salsa","Sour cream + cheddar + butter"],                p:40,c:122,f:20,kcal:856},
+    {name:"Pork Fried Rice",             items:["2.5 cups white rice","5 oz pork loin strips","Soy sauce + egg + sesame oil + green onion"],          p:42,c:118,f:18,kcal:850},
+    {name:"Cheesy Pasta & Turkey",       items:["2.5 cups rotini pasta","5 oz ground turkey","Tomato sauce + mozzarella + garlic bread"],             p:44,c:116,f:18,kcal:848}
+  ]
+};
+
+const SHOPPING = [
+  {cat:"Carbs & Grains", color:"#5fa83b", items:["Rolled oats (5 lb bag)","White jasmine rice (10 lb)","Spaghetti (2 lb)","Penne / rigatoni (2 lb)","Russet potatoes (8 large)","Sweet potatoes (3)","Bagels (6-pack)","Sourdough / whole wheat bread","Rice cakes","Granola (32 oz)","Macaroni (1 box)","Flour tortillas","Pita bread"]},
+  {cat:"Protein",        color:"#4e9fa8", items:["Chicken breasts (2 lb)","Chicken thighs boneless (2 lb)","Rotisserie chicken (1)","Ground turkey (2 lb)","Ground beef 90/10 (2 lb)","Lean beef strips (1 lb)","Canned tuna in olive oil (4)","Shrimp (1 lb frozen)","Salmon fillets (1 lb)","Eggs (2 dozen)","Greek yogurt full-fat (64 oz)","Cottage cheese (16 oz)","Parmesan + mozzarella shredded"]},
+  {cat:"Dairy & Fats",   color:"#d4a017", items:["Whole milk (1 gallon)","Butter (1 lb)","Olive oil","Sesame oil (small)","Peanut butter (40 oz)","Almond butter (16 oz)","Sour cream (16 oz)","Shredded cheddar","Heavy cream (small)",]},
+  {cat:"Produce & Extras",color:"#b8622a",items:["Bananas (2 bunches)","Apples (4)","Oranges (4)","Mangoes (3)","Blueberries (frozen)","Strawberries (frozen)","Pineapple chunks (canned)","Marinara sauce (2 jars)","Soy sauce","Teriyaki sauce","Honey","Maple syrup","Garlic + fresh herbs","Salsa (1 jar)","Black beans (2 cans)"]}
+];
+
+const TIPS = [
+  {e:"🍚", t:"White rice over brown",    b:"Easier to digest at high volume — fewer anti-nutrients means less gas and bloating."},
+  {e:"⏰", t:"Eat every 3 hours",        b:"5 smaller windows vs. 3 massive meals prevents that brick-wall full feeling."},
+  {e:"🥛", t:"Cook oats in whole milk",  b:"Adds 150 kcal passively without extra volume on your plate."},
+  {e:"🥤", t:"Use liquid calories",      b:"The oat smoothie packs 650+ kcal in one glass — liquids digest faster."},
+  {e:"🥦", t:"Limit raw veg at lunch",   b:"Save fiber for dinner so it doesn't kill your appetite for later meals."},
+  {e:"🧂", t:"Season everything well",   b:"Boring food = lower appetite. Strong seasoning makes volume easier to hit."}
+];
+
+const SPLIT = [
+  {
+    day:"Monday", label:"Push — Chest, Shoulders, Triceps", type:"work",
+    exercises:[
+      {name:"Pike Push-Ups",            sets:"4 × 12",      bar:false,
+       desc:"Inverted-V position targets shoulders and upper chest. One of the best zero-equipment pressing movements.",
+       cues:["Elbows at 45° — not flared wide","3-second descent for max tension","Squeeze shoulders hard at the top lockout"]},
+      {name:"Wide Push-Ups",            sets:"4 × 15",      bar:false,
+       desc:"Wider hand placement loads the pec major more than standard push-ups. Foundation chest builder.",
+       cues:["Hands slightly wider than shoulder-width","Lower chest to floor — not your nose","Full lockout squeeze at the top"]},
+      {name:"Decline Push-Ups",         sets:"3 × 12",      bar:false,
+       desc:"Feet elevated on a chair shifts load to upper chest and front delts. The higher the feet, the harder the press.",
+       cues:["Keep a straight body line from head to heels","Control the descent — no dropping","Elevate feet 12–18 inches for best effect"]},
+      {name:"Diamond Push-Ups",         sets:"3 × 12",      bar:false,
+       desc:"Hands form a diamond under your chest. Maximum tricep activation of any push-up variation.",
+       cues:["Elbows tuck tight to your ribs","Full range — chest nearly touches hands","Pause 1 second at the top"]},
+      {name:"Tricep Dips (Chair)",       sets:"4 × 12",      bar:false,
+       desc:"Hands on a chair seat, feet on the floor. Direct tricep builder you can load with a weighted lap.",
+       cues:["Back stays close to the chair edge","Don't shrug — keep shoulders packed down","Full lockout at the top of every rep"]}
+    ]
+  },
+  {
+    day:"Tuesday", label:"Pull — Back & Biceps", type:"work",
+    exercises:[
+      {name:"Pull-Ups (Wide Grip)",      sets:"4 × max",     bar:true,
+       desc:"The king of back exercises. Wide grip hits the lats hardest for that V-taper look.",
+       cues:["Start from a dead hang — full extension","Pull elbows down and back, not just up","Get chin cleanly over the bar every rep"]},
+      {name:"Chin-Ups",                  sets:"4 × max",     bar:true,
+       desc:"Underhand grip shifts load to the biceps while still hammering the lats. Best bicep builder you can do.",
+       cues:["Supinate grip shoulder-width apart","Squeeze the bicep hard at the top","Lower fully — don't use shortened reps"]},
+      {name:"Commando Pull-Ups",         sets:"3 × 8 each",  bar:true,
+       desc:"Grip the bar with hands in a neutral, staggered position and alternate which side your head goes to each rep.",
+       cues:["One hand in front of the other on the bar","Alternate left and right sides each rep","Full hang between reps"]},
+      {name:"Hanging Scapular Retracts", sets:"3 × 15",      bar:true,
+       desc:"Dead hang, then retract and depress your shoulder blades without bending your elbows. Builds the mid-back foundation.",
+       cues:["Arms stay completely straight","Think: pull your shoulder blades into your back pockets","Hold the retracted position 1 second"]},
+      {name:"Towel Bicep Curls",         sets:"3 × 15 each", bar:false,
+       desc:"Loop a towel under one foot, hold both ends and curl against resistance. Solid isolation when no bar is available.",
+       cues:["Elbow pinned to your side throughout","2-second curl up, 3-second descent","Full extension at the bottom"]}
+    ]
+  },
+  {
+    day:"Wednesday", label:"Legs & Glutes", type:"work",
+    exercises:[
+      {name:"Bulgarian Split Squats",    sets:"4 × 10 each", bar:false,
+       desc:"Rear foot elevated on a chair. The single best zero-equipment quad and glute builder — overloads each leg independently.",
+       cues:["Front foot far enough forward so knee tracks over ankle","3-second descent, explosive drive up","Load with a backpack when 10 reps feels easy"]},
+      {name:"Jump Squats",               sets:"4 × 12",      bar:false,
+       desc:"Full-depth squat then explode off the ground. Builds explosive power and triggers fast-twitch hypertrophy.",
+       cues:["Land softly — absorb through hips and knees","Swing arms to add height","Full squat depth before every jump"]},
+      {name:"Glute Bridges (Weighted)",  sets:"4 × 20",      bar:false,
+       desc:"Lie on your back, drive hips up, squeeze hard at the top. Load with a heavy backpack across your hips.",
+       cues:["Full hip extension — don't short-rep it","Hold the top position 1–2 seconds","Drive through your heels, not your toes"]},
+      {name:"Lateral Lunges",            sets:"3 × 12 each", bar:false,
+       desc:"Step wide to one side, sit into that hip, other leg straight. Hits inner thigh and glute med — often neglected.",
+       cues:["Chest stays tall — don't fold forward","Foot flat on the working side","Explode back to center powerfully"]},
+      {name:"Single-Leg Calf Raises",    sets:"4 × 15 each", bar:false,
+       desc:"On a step edge for full range of motion. Essential for lower leg size — most people skip these.",
+       cues:["Full stretch at the bottom, heel below the step","Pause 1 second at the peak","3-second negative every rep"]}
+    ]
+  },
+  {
+    day:"Thursday", label:"Rest & Recovery", type:"rest",
+    exercises:[]
+  },
+  {
+    day:"Friday", label:"Upper Body — Full", type:"work",
+    exercises:[
+      {name:"Pull-Up to Knee Raise",     sets:"4 × 8",       bar:true,
+       desc:"At the top of each pull-up, bring your knees to your chest. Combines lat and core work into one compound movement.",
+       cues:["Full pull-up first — then raise knees","Don't swing — control the knee drive","Lower knees before descending"]},
+      {name:"Neutral-Grip Pull-Ups",     sets:"3 × max",     bar:true,
+       desc:"Parallel (neutral) grip is easiest on the shoulder joints while still hammering the lats and biceps.",
+       cues:["Palms face each other","Drive elbows straight down toward your hips","Great option when shoulders feel fatigued"]},
+      {name:"Archer Push-Ups",           sets:"4 × 8 each",  bar:false,
+       desc:"Wide push-up where one arm extends straight as the other bends. Unilateral chest and shoulder strength.",
+       cues:["Extended arm is a support — all press goes through the bending arm","Lower slowly to the bending side","Alternate sides each set"]},
+      {name:"Pike Push-Up Holds",        sets:"3 × 30 sec",  bar:false,
+       desc:"Hold the bottom position of a pike push-up. Isometric time-under-tension for shoulder hypertrophy.",
+       cues:["Head 1–2 inches from the floor","Breathe steadily — no breath-holding","Elbows slightly flared, not fully caved"]},
+      {name:"Tricep Dips (Chair)",       sets:"4 × 12",      bar:false,
+       desc:"Hands on a chair seat, feet out in front. Direct tricep isolation to finish the session.",
+       cues:["Keep back close to the chair throughout","Don't let shoulders rise toward your ears","Full lockout at the top"]}
+    ]
+  },
+  {
+    day:"Saturday", label:"Legs & Core", type:"work",
+    exercises:[
+      {name:"Hanging Leg Raises",        sets:"4 × 12",      bar:true,
+       desc:"Dead hang, then raise straight legs to parallel or above. The best hanging core exercise for lower abs.",
+       cues:["Don't swing — initiate from the abs, not momentum","Lower legs slowly — 3 seconds down","Tuck version (knees bent) if straight legs are too hard yet"]},
+      {name:"Toes-to-Bar",               sets:"3 × 8",       bar:true,
+       desc:"Full range hanging leg raise — touch the bar with your toes. Elite core and hip flexor strength.",
+       cues:["Use a slight hollow body position on the way up","Control the descent — no dropping","Keep arms straight the entire set"]},
+      {name:"Pistol Squat Progressions", sets:"4 × 6 each",  bar:false,
+       desc:"Work toward a single-leg squat. Start with touch-and-go from a chair, progress to freestanding.",
+       cues:["Extend non-working leg forward as a counterbalance","Arms out front for balance","Work depth — mobility limits this more than strength"]},
+      {name:"Explosive Lunges",          sets:"4 × 10 each", bar:false,
+       desc:"Jump-switch lunges — lunge down then explode and switch legs mid-air. High-power leg conditioning.",
+       cues:["Land softly in a deep lunge every rep","Maintain upright torso throughout","Swing arms to stabilize"]},
+      {name:"Hollow Body Hold",          sets:"4 × 30 sec",  bar:false,
+       desc:"Lower back pressed to floor, arms overhead, legs straight and low. Foundation of real core strength.",
+       cues:["If lower back peels off the floor — raise your legs higher","Squeeze abs, glutes, and quads together","Breathe shallow — core stays braced"]}
+    ]
+  },
+  {
+    day:"Sunday", label:"Active Rest", type:"rest",
+    exercises:[]
+  }
+];
+
+const OVERLOAD_TIPS = [
+  {e:"📈", t:"Add reps each week",      b:"If you hit the top of the rep range easily, add 2 reps next session before adding a set."},
+  {e:"🎒", t:"Load with a backpack",    b:"Fill a backpack with books or water bottles for push-ups, glute bridges, and split squats."},
+  {e:"⏱️", t:"Slow the negative",       b:"A 3–4 second lowering phase doubles time-under-tension — the key driver of hypertrophy."},
+  {e:"😴", t:"Sleep 8+ hours",          b:"90% of muscle is built during sleep. Your meals and workouts are wasted without enough recovery."},
+  {e:"🔁", t:"Track your sessions",     b:"Write down every set and rep. If you can't beat last week's numbers, you won't grow."},
+  {e:"💧", t:"Stay hydrated",           b:"Even 2% dehydration reduces strength output significantly. Drink water between every set."}
+];
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+let today      = new Date();
+function mondayOf(d) {
+  let r = new Date(d);
+  let day = r.getDay() || 7;
+  r.setDate(r.getDate() - day + 1);
+  r.setHours(0,0,0,0);
+  return r;
+}
+function dayIndexOf(d) {
+  return ((d.getDay() || 7) - 1);
+}
+function syncActiveDayToViewedWeek() {
+  activeDay = (wkOffset === 0) ? dayIndexOf(today) : 0;
+}
+function syncActiveSplitDayToToday() {
+  activeSplitDay = dayIndexOf(today);
+}
+let thisMonday = mondayOf(today);
+let wkOffset   = 0;   // 0 = current real week
+let activeDay  = dayIndexOf(today);
+let plans      = {};
+let checked    = {};
+let wState     = { start:135, current:135, goal:150 };
+let activeSplitDay = dayIndexOf(today);
+
+
+
+// ─────────────────────────────────────────
+// DATA PERSISTENCE
+// ─────────────────────────────────────────
+function getStorage() {
+  try { return window.localStorage; } catch (e) { return null; }
+}
+
+function saveData() {
+  let ls = getStorage();
+  if (!ls) return;
+  try {
+    ls.setItem("alphonso_wState", JSON.stringify(wState));
+    ls.setItem("alphonso_checked", JSON.stringify(checked));
+    ls.setItem("alphonso_plans", JSON.stringify(plans));
+  } catch(e) { console.error("Save error", e); }
+}
+
+function loadData() {
+  let ls = getStorage();
+  if (!ls) return;
+  try {
+    let ws = ls.getItem("alphonso_wState");
+    if (ws) wState = JSON.parse(ws);
+
+    let chk = ls.getItem("alphonso_checked");
+    if (chk) checked = JSON.parse(chk);
+
+    let p = ls.getItem("alphonso_plans");
+    if (p) plans = JSON.parse(p);
+  } catch(e) { console.error("Load error", e); }
+}
+
+// ─────────────────────────────────────────
+// HELPERS
+
+
+// ─────────────────────────────────────────
+function seededRng(seed) {
+  let s = seed >>> 0;
+  return function() {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+function pickSeeded(arr, rng) { return arr[Math.floor(rng() * arr.length)]; }
+function isoWeek(d) {
+  let tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  let day = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - day);
+  let jan1 = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  return Math.ceil((((tmp - jan1) / 86400000) + 1) / 7);
+}
+function weekSeed(d) { return d.getFullYear() * 100 + isoWeek(d); }
+function nextMonday(d) { let m = mondayOf(d); m.setDate(m.getDate() + 7); return m; }
+function fmtShort(d) { return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
+function fmtLong(d)  { return d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}); }
+function daysUntil(t) { let n = new Date(); n.setHours(0,0,0,0); return Math.round((t - n) / 86400000); }
+function totals(meals) {
+  return meals.reduce(function(a,m){return{kcal:a.kcal+m.kcal,p:a.p+m.p,c:a.c+m.c,f:a.f+m.f};},{kcal:0,p:0,c:0,f:0});
+}
+function viewMonday() {
+  let m = new Date(thisMonday);
+  m.setDate(m.getDate() + wkOffset * 7);
+  return m;
+}
+function buildPlan(monday, shuffle) {
+  let key = monday.toISOString().slice(0,10);
+  if (plans[key] && !shuffle) return plans[key];
+  let baseSeed = shuffle ? (Math.random() * 0x7fffffff | 0) : weekSeed(monday);
+  let plan = [];
+  for (let d = 0; d < 7; d++) {
+    let rng = seededRng(baseSeed ^ (d * 0xBEEF));
+    plan.push(SLOTS.map(function(slot){ return pickSeeded(POOL[slot], rng); }));
+  }
+  plans[key] = plan;
+  saveData();
+  return plan;
+}
+
+// ─────────────────────────────────────────
+// RENDER MEALS VIEW
+// ─────────────────────────────────────────
+function renderMealsView() {
+  syncActiveDayToViewedWeek();
+  let monday = viewMonday();
+  let sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+  document.getElementById("weekTitle").textContent = fmtShort(monday) + " – " + fmtShort(sunday);
+  document.getElementById("prevBtn").disabled = false;
+  document.getElementById("nextBtn").disabled = (wkOffset >= 4);
+
+  let nm = nextMonday(today);
+  let dc = daysUntil(nm);
+  document.getElementById("nextUpdate").textContent =
+    wkOffset === 0 ? (dc === 1 ? "New plan tomorrow" : "New plan in " + dc + " days") : "";
+
+  let tabsEl = document.getElementById("dayTabs");
+  tabsEl.innerHTML = "";
+  for (let i = 0; i < 7; i++) {
+    let dt = new Date(monday);
+    dt.setDate(dt.getDate() + i);
+    let btn = document.createElement("button");
+    btn.className = "day-tab" + (i === activeDay ? " active" : "");
+    btn.innerHTML =
+      '<span class="day-tab-label">' + SHORT[i] + '</span>' +
+      '<span class="day-tab-date">' + dt.getDate() + '</span>';
+    btn.addEventListener("click", function(){ activeDay = i; renderDay(); });
+    tabsEl.appendChild(btn);
+  }
+  renderTips();
+  renderDay();
+}
+
+function renderTips() {
+  let tl = document.getElementById("tipsList");
+  if (!tl) return;
+  tl.innerHTML = "";
+  TIPS.forEach(function(t){
+    let d = document.createElement("div");
+    d.className = "tip-row";
+    d.innerHTML = '<div class="tip-emoji">' + t.e + '</div><div><div class="tip-title">' + t.t + '</div><div class="tip-body">' + t.b + '</div></div>';
+    tl.appendChild(d);
+  });
+}
+
+function renderDay() {
+  let monday = viewMonday();
+  let plan   = buildPlan(monday, false);
+  let meals  = plan[activeDay];
+  let t      = totals(meals);
+  let dt     = new Date(monday); dt.setDate(dt.getDate() + activeDay);
+
+  let tabs = document.querySelectorAll(".day-tab");
+  for (let i = 0; i < tabs.length; i++) {
+    tabs[i].classList.toggle("active", i === activeDay);
+  }
+
+  document.getElementById("dayName").textContent = DAYS[activeDay];
+  document.getElementById("dayDate").textContent = fmtLong(dt);
+  document.getElementById("mKcal").textContent = t.kcal.toLocaleString() + " kcal";
+  document.getElementById("mProt").textContent = t.p + "g";
+  document.getElementById("mCarb").textContent = t.c + "g";
+
+  let list = document.getElementById("mealList");
+  list.innerHTML = "";
+  for (let s = 0; s < SLOTS.length; s++) {
+    let slot = SLOTS[s];
+    let meal = meals[s];
+    let row = document.createElement("div");
+    row.className = "meal-row";
+
+    let items = meal.items.map(function(it){ return "<li>" + it + "</li>"; }).join("");
+    row.innerHTML =
+      '<div class="meal-header">' +
+        '<div class="meal-dot" style="background:' + DOTS[slot] + '"></div>' +
+        '<div class="meal-time">' + TIMES[slot] + '</div>' +
+        '<div class="meal-name">' + meal.name + '</div>' +
+        '<div class="meal-kcal">' + meal.kcal + ' kcal</div>' +
+        '<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6,9 12,15 18,9"/></svg>' +
+      '</div>' +
+      '<div class="meal-body">' +
+        '<div class="meal-body-inner">' +
+          '<ul class="meal-items">' + items + '</ul>' +
+          '<div class="meal-macros-detail">' +
+            '<div class="mdm">Calories <span>' + meal.kcal + '</span></div>' +
+            '<div class="mdm">Protein <span>' + meal.p + 'g</span></div>' +
+            '<div class="mdm">Carbs <span>' + meal.c + 'g</span></div>' +
+            '<div class="mdm">Fat <span>' + meal.f + 'g</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    row.querySelector(".meal-header").addEventListener("click", function(){
+      row.classList.toggle("open");
+    });
+    list.appendChild(row);
+  }
+}
+
+// ─────────────────────────────────────────
+// RENDER PROGRESS VIEW
+// ─────────────────────────────────────────
+function renderProgressView() {
+  let start   = wState.start;
+  let current = wState.current;
+  let goal    = wState.goal;
+  let total   = goal - start;
+  let gained  = Math.max(0, current - start);
+  let pct     = total > 0 ? Math.min(100, Math.round((gained / total) * 100)) : 100;
+  let left    = Math.max(0, goal - current);
+
+  document.getElementById("goalRange").textContent  = start + " lbs → " + goal + " lbs";
+  document.getElementById("goalPct").textContent    = pct + "%";
+  document.getElementById("goalFill").style.width   = pct + "%";
+  document.getElementById("gCurrent").textContent   = current % 1 === 0 ? current : current.toFixed(1);
+  document.getElementById("gGained").textContent    = gained % 1 === 0 ? gained : gained.toFixed(1);
+  document.getElementById("gLeft").textContent      = left % 1 === 0 ? left : left.toFixed(1);
+}
+
+// ─────────────────────────────────────────
+// RENDER SHOPPING VIEW
+// ─────────────────────────────────────────
+function renderShoppingView() {
+  let grid = document.getElementById("shopGrid");
+  grid.innerHTML = "";
+  SHOPPING.forEach(function(cat){
+    let div = document.createElement("div");
+    div.className = "shop-cat";
+    let items = cat.items.map(function(item, i){
+      let key = cat.cat + i;
+      let on  = !!checked[key];
+      return '<li class="shop-item' + (on ? ' checked' : '') + '" data-key="' + key + '">' +
+               '<div class="chk">' + (on ? '✓' : '') + '</div>' +
+               '<span class="item-text">' + item + '</span>' +
+             '</li>';
+    }).join("");
+    div.innerHTML = '<div class="shop-cat-title"><div class="cat-dot" style="background:' + cat.color + '"></div>' + cat.cat + '</div><ul class="shop-items">' + items + '</ul>';
+    div.querySelectorAll(".shop-item").forEach(function(el){
+      el.addEventListener("click", function(){
+        let k = el.dataset.key;
+        checked[k] = !checked[k];
+        el.classList.toggle("checked", checked[k]);
+        el.querySelector(".chk").textContent = checked[k] ? "✓" : "";
+        saveData();
+      });
+    });
+    grid.appendChild(div);
+  });
+}
+
+// ─────────────────────────────────────────
+// RENDER WORKOUT VIEW
+// ─────────────────────────────────────────
+function renderWorkoutView() {
+  syncActiveSplitDayToToday();
+  let monday = mondayOf(today);
+  let tabsEl = document.getElementById("splitTabs");
+  tabsEl.innerHTML = "";
+  SPLIT.forEach(function(d, i){
+    let dt = new Date(monday);
+    dt.setDate(dt.getDate() + i);
+    let btn = document.createElement("button");
+    btn.className = "split-tab" + (i === activeSplitDay ? " active" : "");
+    btn.innerHTML =
+      '<span class="day-tab-label">' + d.day.slice(0,3) + '</span>' +
+      '<span class="day-tab-date">' + dt.getDate() + '</span>';
+    btn.addEventListener("click", function(){ activeSplitDay = i; renderWorkoutDay(); renderSplitTabs(); });
+    tabsEl.appendChild(btn);
+  });
+  renderWorkoutDay();
+
+  let otEl = document.getElementById("overloadTips");
+  otEl.innerHTML = "";
+  OVERLOAD_TIPS.forEach(function(t){
+    let d = document.createElement("div");
+    d.className = "overload-tip";
+    d.innerHTML = '<div class="ot-icon">' + t.e + '</div><div><div class="ot-title">' + t.t + '</div><div class="ot-body">' + t.b + '</div></div>';
+    otEl.appendChild(d);
+  });
+}
+
+function renderSplitTabs() {
+  document.querySelectorAll(".split-tab").forEach(function(btn, i){
+    btn.classList.toggle("active", i === activeSplitDay);
+  });
+}
+
+function renderWorkoutDay() {
+  let split   = SPLIT[activeSplitDay];
+  let content = document.getElementById("workoutContent");
+  content.innerHTML = "";
+
+  let badge = document.createElement("div");
+  badge.className = "day-badge " + split.type;
+  badge.textContent = split.label;
+  content.appendChild(badge);
+
+  if (split.type === "rest") {
+    let rc = document.createElement("div");
+    rc.className = "card rest-card";
+    rc.innerHTML = '<div class="rest-icon">🛌</div><h3>Rest Day</h3><p>Let your muscles recover and grow. Light walking, stretching, or mobility work only. Eat your full meal plan — recovery nutrition matters.</p>';
+    content.appendChild(rc);
+    return;
+  }
+
+  let list = document.createElement("div");
+  list.className = "exercise-list";
+  split.exercises.forEach(function(ex, idx){
+    let row = document.createElement("div");
+    row.className = "ex-row";
+    let cues = ex.cues.map(function(c){ return "<li>" + c + "</li>"; }).join("");
+    row.innerHTML =
+      '<div class="ex-header">' +
+        '<div class="ex-num">' + (idx+1) + '</div>' +
+        '<div class="ex-name">' + ex.name + (ex.bar ? ' <span class="bar-dot" title="Requires pull-up bar">🔩</span>' : '') + '</div>' +
+        '<div class="ex-sets">' + ex.sets + '</div>' +
+        '<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6,9 12,15 18,9"/></svg>' +
+      '</div>' +
+      '<div class="ex-body">' +
+        '<div class="ex-body-inner">' +
+          (ex.bar ? '<div class="bar-tag">🔩 Requires pull-up bar</div>' : '') +
+          '<div class="ex-desc">' + ex.desc + '</div>' +
+          '<ul class="ex-cues">' + cues + '</ul>' +
+        '</div>' +
+      '</div>';
+    row.querySelector(".ex-header").addEventListener("click", function(){ row.classList.toggle("open"); });
+    list.appendChild(row);
+  });
+  content.appendChild(list);
+}
+
+// ─────────────────────────────────────────
+// TAB SWITCHING
+// ─────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+  document.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+  document.getElementById("view-" + id).classList.add("active");
+  document.getElementById("tab-" + id).classList.add("active");
+  if (id === "progress") renderProgressView();
+  if (id === "workout") renderWorkoutView();
+}
+
+// ─────────────────────────────────────────
+// WEIGHT EDITOR
+// ─────────────────────────────────────────
+document.getElementById("editToggle").addEventListener("click", function(){
+  let form = document.getElementById("weightForm");
+  let open = form.style.display !== "block";
+  form.style.display = open ? "block" : "none";
+  if (open) {
+    document.getElementById("inCurrent").value = wState.current;
+    document.getElementById("inGoal").value    = wState.goal;
+    document.getElementById("inStart").value   = wState.start;
+  }
+});
+document.getElementById("cancelWeight").addEventListener("click", function(){
+  document.getElementById("weightForm").style.display = "none";
+});
+document.getElementById("saveWeight").addEventListener("click", function(){
+  let cur   = parseFloat(document.getElementById("inCurrent").value);
+  let goal  = parseFloat(document.getElementById("inGoal").value);
+  let start = parseFloat(document.getElementById("inStart").value);
+  if (isNaN(cur) || isNaN(goal) || isNaN(start)) { showToast("Please fill all fields."); return; }
+  if (goal <= start) { showToast("Goal must be greater than starting weight."); return; }
+  wState = { start: start, current: cur, goal: goal };
+  saveData();
+  document.getElementById("weightForm").style.display = "none";
+  renderProgressView();
+  showToast("Weight updated ✓");
+});
+
+// ─────────────────────────────────────────
+// CONTROLS
+// ─────────────────────────────────────────
+document.getElementById("prevBtn").addEventListener("click", function(){
+  wkOffset--; activeDay = 0; renderMealsView();
+});
+document.getElementById("nextBtn").addEventListener("click", function(){
+  if (wkOffset < 4) { wkOffset++; activeDay = 0; renderMealsView(); }
+});
+document.getElementById("shuffleBtn").addEventListener("click", function(){
+  buildPlan(viewMonday(), true); renderDay();
+});
+
+// ─────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────
+function showToast(msg) {
+  let t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2400);
+}
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+loadData();
+buildPlan(thisMonday, false);
+renderMealsView();
+renderShoppingView();
+
+
+// ─────────────────────────────────────────
+// PWA SERVICE WORKER
+// ─────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("./sw.js").catch(function(){});
+  });
+}
+
+</script>
+</body>
+</html>
